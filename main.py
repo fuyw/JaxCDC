@@ -64,7 +64,7 @@ def get_args():
 
 def main(args):
     # Experiment name
-    exp_name = f's{args.seed}'
+    exp_name = f's{args.seed}_cdc'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -82,6 +82,10 @@ def main(args):
     env = gym.make(args.env)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
+
+    # For debug
+    fixed_obs = np.random.normal(size=(128, obs_dim))
+    fixed_act = np.random.normal(size=(128, act_dim))
 
     # random seeds
     env.seed(args.seed)
@@ -101,7 +105,7 @@ def main(args):
                      lr=args.lr,
                      lr_actor=args.lr_actor,
                      select_action_cql=args.select_action_cql)
-    agent.save(f"{args.model_dir}/{args.env}/{exp_name}_step0")
+    # agent.save(f"{args.model_dir}/{args.env}/{exp_name}_step0")
 
     logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
     logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}\n")
@@ -132,17 +136,21 @@ def main(args):
                 "reward": eval_reward,
                 "time": (time.time() - start_time) / 60
             })
+            fixed_mean_action, _ = agent.actor.apply({"params": agent.actor_state.params},
+                                                 fixed_obs, jax.random.PRNGKey(0))
+            fixed_mean_q = agent.critic.apply({"params": agent.critic_state.params},
+                                          fixed_obs, fixed_act).mean()
             logs.append(log_info)
             logger.info(
                 f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}, penalty_loss: {log_info['penalty_loss']:.2f}\n"
-                f"\tactor_loss: {log_info['actor_loss']:.2f}, mle_prob: {log_info['mle_prob']:.2f}\n"
-                f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}\n"
-                f"\tconcat_q_max: {log_info['concat_q_max']:.2f}, target_q: {log_info['target_q']:.2f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, penalty_loss: {log_info['penalty_loss']:.2f}, actor_loss: {log_info['actor_loss']:.2f}\n"
+                f"\tmle_prob: {log_info['mle_prob']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
+                f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}, concat_q_max: {log_info['concat_q_max']:.2f}\n"
+                f"\ttarget_q: {log_info['target_q']:.2f}, penalty_concat_q_avg: {log_info['penalty_concat_q_avg']:.2f}\n"
+                f"\tfixed_mean_actions: {fixed_mean_action.sum():.2f}, fixed_mean_q: {fixed_mean_q:.2f}\n"
             )
 
-            if (t+1) % (2 * args.eval_freq) == 0:
-                agent.save(f"{args.model_dir}/{args.env}/{exp_name}_step{int((t+1)/1e4)}")
+    agent.save(f"{args.model_dir}/{args.env}/{exp_name}")
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
@@ -160,3 +168,4 @@ if __name__ == "__main__":
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     main(args)
+

@@ -55,9 +55,7 @@ class Actor(nn.Module):
         # Compute log_prob
         raw_action = atanh(action)
         log_prob = pi_distribution.log_prob(raw_action).sum(-1)
-        # log_prob -= (2 * jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action)).sum(-1)
-        log_prob -= (2 * jnp.log(2) - action - jax.nn.softplus(-2 * action)).sum(-1)
-
+        log_prob -= (2*(jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action))).sum(-1)
         return log_prob
 
     def __call__(self, observation: jnp.ndarray, seed: jnp.ndarray):
@@ -226,7 +224,9 @@ class CDCAgent:
                 "concat_q_avg": concat_q.mean(),
                 "concat_q_min": concat_q.min(),
                 "concat_q_max": concat_q.max(),
+                "penalty_concat_q_avg": penalty_concat_q.mean(),
                 "target_q": target_q,
+                "sampled_q": sampled_q,
                 "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
                 "penalty_loss": penalty_loss,
@@ -333,3 +333,4 @@ class CDCAgent:
             params=actor_params,
             tx=optax.adam(learning_rate=self.lr_actor)
         )
+
